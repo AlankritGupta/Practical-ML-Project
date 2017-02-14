@@ -1,0 +1,171 @@
+---
+title: "Practical_ML_week4"
+author: "Alankrit Gupta"
+date: "February 12, 2017"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## AIM
+
+The aim is to predict whether the manner in which they did the exercise was correct or incorrect. This is the "classe" variable in the training set. You may use any of the other variables to predict with. Create a report describing how the modelwas built, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+
+
+## Executive summary
+
+This report will describe how the data captured are used to identify the parameters involved in predicting the movement involved based on the above classification, and then to predict the movement for 20 test cases.
+
+The training data were divided into two groups, a training data and a validation data (to be used to validate the data), to derived the prediction model by using the training data, to validate the model where an expected out-of-sample error rate of less than 0.5%, or 99.5% accuracy, would be acceptable before it is used to perform the prediction on the 20 test cases - that must have 100% accuracy (to obtain 20 points awarded).
+
+The modle trained using decision tree was able to achieve almost 87% accuracy on the validation set whereas the training model developed using Random Forest was able to achieve over 99.89% accuracy, and was able to predict the 20 test cases with 100% accuracy.
+
+
+
+## Laoding Libraries
+
+```{r }
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(RColorBrewer)
+library(knitr)
+library(randomForest)
+library(readr)
+library(rattle)
+```
+
+## Laoding data
+```{r Loading}
+setwd("C:/Users/ag14721/Downloads/Self Study/prac_ML")
+training <- read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv("pml-testing.csv")
+```
+
+## Creating test-train split
+```{r}
+set.seed(12345)
+split <- createDataPartition(training$classe, p=0.6, list=FALSE)
+myTraining <- (training[split, ])
+myTesting <- (training[-split, ])
+```
+
+
+## Making some changes in the datasets
+Few variables are not very relevant to the model because they do not have contributing insights
+```{r}
+#removing variables nearly zero variance
+
+
+nzv <- nearZeroVar(myTraining, saveMetrics=TRUE)
+myTraining <- myTraining[,nzv$nzv==FALSE]
+
+nzv<- nearZeroVar(myTesting,saveMetrics=TRUE)
+myTesting <- myTesting[,nzv$nzv==FALSE]
+
+
+#removing variables that have more than a 70% of NA's.
+trainingV3 <- myTraining
+for(i in 1:length(myTraining)) {
+    if( sum( is.na( myTraining[, i] ) ) /nrow(myTraining) >= .7) {
+        for(j in 1:length(trainingV3)) {
+            if( length( grep(names(myTraining[i]), names(trainingV3)[j]) ) == 1)  {
+                trainingV3 <- trainingV3[ , -j]
+            }   
+        } 
+    }
+}
+
+# Set back to the original variable name
+myTraining <- trainingV3
+rm(trainingV3)
+
+#Doing the same cleaning to myTesting and testing data sets
+
+clean1 <- colnames(myTraining)
+clean2 <- colnames(myTraining[, -59])
+myTesting <- myTesting[clean1]
+testing <- testing[clean2]
+for (i in 1:length(testing) ) {
+    for(j in 1:length(myTraining)) {
+        if( length( grep(names(myTraining[i]), names(testing)[j]) ) == 1)  {
+            class(testing[j]) <- class(myTraining[i])
+        }      
+    }      
+}
+
+# To get the same class between testing and myTraining
+testing <- rbind(myTraining[2, -59] , testing)
+testing <- testing[-1,]
+
+## removing user ID varaibles so that they do not interfere with the model
+myTraining$X<- NULL
+myTesting$X<-NULL
+
+testing$X<-NULL
+```
+
+
+## Modeling using decision trees
+```{r}
+
+set.seed(1000)
+modFitA1 <- rpart(classe ~ ., data=myTraining, method="class")
+fancyRpartPlot(modFitA1)
+
+# prediction
+predictionsA1 <- predict(modFitA1, myTesting, type = "class")
+cmtree <- confusionMatrix(predictionsA1, myTesting$classe)
+cmtree
+
+```
+
+## Modeling using Random forest
+```{r}
+set.seed(12345)
+modFitB1 <- randomForest(classe ~ ., data=myTraining)
+predictionB1 <- predict(modFitB1, myTesting, type = "class")
+cmrf <- confusionMatrix(predictionB1, myTesting$classe)
+cmrf
+```
+
+
+## Prediction on test files
+```{r}
+predictionsB2 <- predict(modFitB1, testing, type = "class")
+
+# Write the results to a text file for submission
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(predictionsB2)
+```
+
+The accuracy of random forest is better than the decision tree model, and therefore i'll be using thsi for predictions on the test dataset.
+
+## Including Plots
+
+### Decision tree plot
+```{r echo=FALSE}
+
+plot(cmtree$table, col = cmtree$byClass, main = paste("Decision Tree Confusion Matrix: Accuracy =", round(cmtree$overall['Accuracy'], 4)))
+
+```
+### Random Forest plot
+```{r}
+
+plot(cmrf$table, col = cmtree$byClass, main = paste("Random Forest Confusion Matrix: Accuracy =", round(cmrf$overall['Accuracy'], 4)))
+```
+
+  
